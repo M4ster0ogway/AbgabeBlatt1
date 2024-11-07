@@ -4,7 +4,22 @@ output: html_notebook
 ---
 Berechnung der höchsten mittleren Temperatur in Grad Celsius mit einer Tabellenkalkulation
 ```{r}
-cpi <- read.table("bike_sharing_data_(with_NAs).csv", sep = ",", header = TRUE) 
-max_wert <- max(cpi$average_temperature, na.rm = TRUE)
+bikedata <- read.table("bike_sharing_data_(with_NAs).csv", sep = ",", header = TRUE) 
+max_wert <- max(bikedata$average_temperature, na.rm = TRUE)
 print(max_wert)
+```
+Ausgabe dwer kompletten Zeile mit der höchsten Durchschnittstemperatur
+```{r}
+bikedata <- read.table("bike_sharing_data_(with_NAs).csv", sep = ",", header = TRUE)
+zeile_max <- bikedata[which.max(bikedata$average_temperature), ]
+print(zeile_max)
+```
+Datenbank erstellt und CSV in die Datenbank eingelesen
+```{r}
+library(DBI)
+mydb <- dbConnect(RSQLite::SQLite(), "my-db.sqlite")
+dbWriteTable(mydb, "bikedata", bikedata, overwrite = TRUE)
+dbListTables(mydb)
+dbReadTable(mydb, "bikedata")
+dbDisconnect(mydb)
 ```
