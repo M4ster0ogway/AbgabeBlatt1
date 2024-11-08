@@ -18,8 +18,84 @@ Datenbank erstellt und CSV in die Datenbank eingelesen
 ```{r}
 library(DBI)
 mydb <- dbConnect(RSQLite::SQLite(), "my-db.sqlite")
-dbWriteTable(mydb, "bikedata", bikedata, overwrite = TRUE)
+dbWriteTable(mydb, "Verleih", bikedata, overwrite = TRUE)
 dbListTables(mydb)
-dbReadTable(mydb, "bikedata")
+dbReadTable(mydb, "Verleih")
 dbDisconnect(mydb)
 ```
+
+
+```{r}
+mydb <- dbConnect(RSQLite::SQLite(), "my-db.sqlite")
+dbExecute(mydb, "CREATE TABLE Stationen (
+            id INTEGER PRIMARY KEY,
+            station TEXT NOT NULL
+          );")
+dbDisconnect(mydb)
+```
+
+```{r}
+mydb <- dbConnect(RSQLite::SQLite(), "my-db.sqlite")
+result <-dbGetQuery(mydb,"SELECT distinct station FROM Verleih")
+result$id <- 1:nrow(result)
+result <- result[, c("id", "station")]
+dbWriteTable(mydb, "Stationen", result, overwrite=TRUE)
+dbReadTable(mydb, "Stationen")
+```
+```{r}
+mydb <- dbConnect(RSQLite::SQLite(), "my-db.sqlite")
+dbExecute(mydb, "ALTER TABLE Verleih DROP COLUMN station")
+dbReadTable(mydb, "Verleih")
+```
+
+```{r}
+mydb <- dbConnect(RSQLite::SQLite(), "my-db.sqlite")
+dbExecute(mydb, "
+  CREATE TABLE Verleih_new (
+    id INTEGER PRIMARY KEY,
+    StationId INTEGER,
+    'group' INTEGER NOT NULL,
+    date TEXT NOT NULL,
+    day_of_year INTEGER NOT NULL,
+    day_of_week INTEGER NOT NULL,
+    month_of_year INTEGER NOT NULL,
+    precipitation REAL NOT NULL,
+    windspeed REAL NOT NULL,
+    min_temperature INTEGER NOT NULL,
+    average_temperature INTEGER NOT NULL,
+    max_temperature INTEGER NOT NULL,
+    count INTEGER NOT NULL,
+    FOREIGN KEY (StationId) REFERENCES station(id)
+  )")
+dbExecute(mydb, "
+  INSERT INTO Verleih_new (StationId, 'group',
+date,
+day_of_year,
+day_of_week,
+month_of_year,
+precipitation,
+windspeed,
+min_temperature,
+average_temperature,
+max_temperature,
+count
+)
+
+  SELECT StationId, 'group', date, day_of_year,day_of_week,
+month_of_year,
+precipitation,
+windspeed,
+min_temperature,
+average_temperature,
+max_temperature,
+count FROM Verleih
+")
+result <-dbGetQuery(mydb,"SELECT date FROM Verleih")
+result$id <- 1:nrow(result)
+dbWriteTable(mydb, "Verleih_new", result, overwrite=TRUE)
+dbExecute(mydb, "DROP TABLE Verleih")
+dbExecute(mydb, "ALTER TABLE Verleih_new RENAME TO Verleih")
+dbReadTable(mydb, "Verleih")
+dbDisconnect(mydb)
+```
+
