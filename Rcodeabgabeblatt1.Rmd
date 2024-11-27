@@ -4,21 +4,25 @@ output: html_notebook
 ---
 Berechnung der höchsten mittleren Temperatur in Grad Celsius mit einer Tabellenkalkulation
 ```{r}
-bikedata <- read.table("bike_sharing_data_(with_NAs).csv", sep = ",", header = TRUE) 
-max_wert <- max(bikedata$average_temperature, na.rm = TRUE)
+bikedata <- read.table("bike_sharing_data_(with_NAs).csv", sep = ",", header = TRUE)
+group_12_data <- bikedata[bikedata$group == 12, ]
+max_wert <- max(group_12_data$average_temperature, na.rm = TRUE)
 print(max_wert)
 ```
 Ausgabe dwer kompletten Zeile mit der höchsten Durchschnittstemperatur
 ```{r}
 bikedata <- read.table("bike_sharing_data_(with_NAs).csv", sep = ",", header = TRUE)
-zeile_max <- bikedata[which.max(bikedata$average_temperature), ]
+
+group_12_data <- bikedata[bikedata$group == 12, ]
+
+zeile_max <- group_12_data[which.max(bikedata_group_12$average_temperature), ]
 print(zeile_max)
 ```
 Datenbank erstellt und CSV in die Datenbank eingelesen
 ```{r}
 library(DBI)
 mydb <- dbConnect(RSQLite::SQLite(), "my-db.sqlite")
-dbWriteTable(mydb, "Verleih", bikedata, overwrite = TRUE)
+dbWriteTable(mydb, "Verleih", group_12_data, overwrite = TRUE)
 dbListTables(mydb)
 dbReadTable(mydb, "Verleih")
 dbDisconnect(mydb)
@@ -68,27 +72,10 @@ dbExecute(mydb, "
     FOREIGN KEY (StationId) REFERENCES station(id)
   )")
 dbExecute(mydb, "
-  INSERT INTO Verleih_new (StationId, 'group',
-date,
-day_of_year,
-day_of_week,
-month_of_year,
-precipitation,
-windspeed,
-min_temperature,
-average_temperature,
-max_temperature,
-count
+  INSERT INTO Verleih_new (StationId, 'group', date, day_of_year, day_of_week, month_of_year, precipitation, windspeed, min_temperature, average_temperature, max_temperature, count
 )
 
-  SELECT StationId, 'group', date, day_of_year,day_of_week,
-month_of_year,
-precipitation,
-windspeed,
-min_temperature,
-average_temperature,
-max_temperature,
-count FROM Verleih
+  SELECT StationId, 'group', date, day_of_year,day_of_week, month_of_year, precipitation, windspeed, min_temperature, average_temperature, max_temperature, count FROM Verleih
 ")
 result <-dbGetQuery(mydb,"SELECT date FROM Verleih")
 result$id <- 1:nrow(result)
@@ -97,5 +84,133 @@ dbExecute(mydb, "DROP TABLE Verleih")
 dbExecute(mydb, "ALTER TABLE Verleih_new RENAME TO Verleih")
 dbReadTable(mydb, "Verleih")
 dbDisconnect(mydb)
+##TODO Schöner formattieren, results nicht mit date counten sondern ZeileN zählen und ID danach verteilen.(Zeile 93)
+```
+
+```{r}
+# Load the CSV data
+bikedata <- read.csv("bike_sharing_data_(with_NAs).csv", header = TRUE)
+
+# Filter the rows where 'group' is 12
+bikedata_group_12 <- bikedata[bikedata$group == 12, ]
+
+# Calculate the maximum 'average_temperature' for the filtered data
+max_wert <- max(bikedata_group_12$average_temperature, na.rm = TRUE)
+
+# Print the maximum value
+print(max_wert)
+
+```
+```{r}
+-- Erstellen der Stations-Tabelle
+CREATE TABLE stations (
+  station_id INTEGER PRIMARY KEY,
+  station TEXT NOT NULL
+);
+
+-- Erstellen der Wetterdaten-Tabelle
+CREATE TABLE weather_data (
+  id INTEGER PRIMARY KEY,
+  station_id INTEGER,
+  date TEXT NOT NULL,
+  day_of_year INTEGER NOT NULL,
+  day_of_week INTEGER NOT NULL,
+  month_of_year INTEGER NOT NULL,
+  precipitation REAL NOT NULL,
+  windspeed REAL NOT NULL,
+  min_temperature INTEGER NOT NULL,
+  average_temperature INTEGER NOT NULL,
+  max_temperature INTEGER NOT NULL,
+  count INTEGER NOT NULL,
+  FOREIGN KEY (station_id) REFERENCES stations(station_id)
+);
+
+```
+
+```{r}
+dbListTables(conn)
+dbGetQuery(conn, "PRAGMA table_info(stations);")
+
+```
+
+
+```{r}
+# Lade das RSQLite-Paket
+library(RSQLite)
+
+# Erstelle eine SQLite-Datenbank
+conn <- dbConnect(RSQLite::SQLite(), "bike_sharing_data.db")
+dbExecute(conn, "DROP TABLE IF EXISTS stations;")
+
+# Erstelle die Tabellen in der SQLite-Datenbank
+dbExecute(conn, "
+  CREATE TABLE stations (
+    station_id INTEGER PRIMARY KEY,
+    station TEXT NOT NULL
+  );
+  
+  CREATE TABLE weather_data (
+    id INTEGER PRIMARY KEY,
+    station_id INTEGER,
+    date TEXT NOT NULL,
+    day_of_year INTEGER NOT NULL,
+    day_of_week INTEGER NOT NULL,
+    month_of_year INTEGER NOT NULL,
+    precipitation REAL NOT NULL,
+    windspeed REAL NOT NULL,
+    min_temperature INTEGER NOT NULL,
+    average_temperature INTEGER NOT NULL,
+    max_temperature INTEGER NOT NULL,
+    count INTEGER NOT NULL,
+    FOREIGN KEY (station_id) REFERENCES stations(station_id)
+  );
+")
+
+# Importiere die Daten aus CSV-Dateien
+bikedata <- read.csv("bike_sharing_data_(with_NAs).csv")
+group_12_data <- bikedata[bikedata$group == 12, ]
+# Importiere die Stationsdaten in die 'stations'-Tabelle
+stations_data <- unique(group_12_data[, c("station")])  # Alle Stationen ohne Duplikate
+stations_data <- unique(na.omit(group_12_data["station"]))
+
+dbWriteTable(conn, "stations", stations_data, append = TRUE)
+
+# Füge die Wetterdaten in die 'weather_data'-Tabelle ein
+weather_data <- group_12_data[, c("station", "date", "day_of_year", "day_of_week", "month_of_year", 
+                             "precipitation", "windspeed", "min_temperature", "average_temperature", 
+                             "max_temperature", "count")]
+
+# Hole die station_id für jede Station aus der 'stations'-Tabelle
+weather_data$station_id <- sapply(weather_data$station, function(x) {
+  query <- sprintf("SELECT station_id FROM stations WHERE station = '%s'", x)
+  result <- dbGetQuery(conn, query)
+  result$station_id[1]
+})
+
+# Füge die Wetterdaten in die 'weather_data'-Tabelle ein
+dbWriteTable(conn, "weather_data", weather_data, append = TRUE, row.names = FALSE)
+
+# Bestätige den erfolgreichen Import
+cat("Daten wurden erfolgreich importiert!")
+dbGetQuery(conn, "SELECT MAX(average_temperature) FROM weather_data")
+print(result)
+```
+```{r}
+head(stations_data)
+stations_data <- data.frame(
+  station_id = seq_len(nrow(stations_data)), # Generate unique IDs
+  station = stations_data$station            # Assign station names
+)
+
+```
+
+```{r}
+colnames(bikedata)
+
+```
+
+```{r}
+
+
 ```
 
