@@ -1,0 +1,93 @@
+---
+title: "Abgabeblatt1CoMet"
+output: html_document
+---
+
+```{r}
+library(readr)
+bikedata <- read_csv("bike_sharing_data_(with_NAs).csv")
+group_12_data <- bikedata[bikedata$group == 12, ]
+```
+```{r}
+max_avg_temp <- max(group_12_data$average_temperature, na.rm = TRUE)
+print(max_avg_temp)
+
+```
+```{r}
+write.csv(group_12_data, "group_12_filtered.csv", row.names = FALSE)
+read.csv("group_12_filtered.csv")
+```
+
+```{r}
+stations <- unique(group_12_data[, c("station")])
+stations <- data.frame(station_id = seq_len(nrow(stations)), station_name = stations$station)
+
+weather_data <- merge(group_12_data, stations, by.x = "station", by.y = "station_name")
+weather_data <- weather_data[, c("station_id", "date", "day_of_year", "day_of_week",
+                                 "month_of_year", "precipitation", "windspeed",
+                                 "min_temperature", "average_temperature", 
+                                 "max_temperature", "count")]
+
+write.csv(stations, "stations.csv", row.names = FALSE)
+write.csv(weather_data, "weather_data.csv", row.names = FALSE)
+
+```
+
+```{r}
+library(RSQLite)
+
+conn <- dbConnect(SQLite(), "weather_data.db")
+
+dbExecute(conn, "DROP TABLE IF EXISTS stations;")
+dbExecute(conn, "DROP TABLE IF EXISTS weather_data;")
+
+dbExecute(conn, "
+  CREATE TABLE stations (
+    station_id INTEGER PRIMARY KEY,
+    station_name TEXT NOT NULL
+  );
+")
+
+dbExecute(conn, "
+  CREATE TABLE weather_data (
+    id INTEGER PRIMARY KEY,
+    station_id INTEGER NOT NULL,
+    date TEXT NOT NULL,
+    day_of_year INTEGER NOT NULL,
+    day_of_week INTEGER NOT NULL,
+    month_of_year INTEGER NOT NULL,
+    precipitation REAL NOT NULL,
+    windspeed REAL NOT NULL,
+    min_temperature INTEGER NOT NULL,
+    average_temperature INTEGER NOT NULL,
+    max_temperature INTEGER NOT NULL,
+    count INTEGER NOT NULL,
+    FOREIGN KEY (station_id) REFERENCES stations(station_id)
+  );
+")
+
+stations_data <- read.csv("stations.csv")
+weather_data <- read.csv("weather_data.csv")
+
+weather_data <- weather_data[complete.cases(weather_data), ]
+
+dbWriteTable(conn, "stations", stations_data, append = TRUE, row.names = FALSE)
+dbWriteTable(conn, "weather_data", weather_data, append = TRUE, row.names = FALSE)
+
+max_avg_temp <- dbGetQuery(conn, "
+  SELECT MAX(average_temperature) AS max_avg_temp
+  FROM weather_data;
+")
+
+print(max_avg_temp)
+
+dbDisconnect(conn)
+
+
+```
+```{r}
+
+summary(stations_data)
+summary(weather_data)
+
+```
